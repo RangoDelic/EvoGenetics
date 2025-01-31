@@ -1,0 +1,115 @@
+---
+title: "examMarkdown"
+author: "Goran Delic"
+date: '`r Sys.Date()`'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r echo=TRUE, message=FALSE}
+#Loading the required packages
+library(dartR)
+library(adegenet)
+library(tidyverse)
+```
+
+## Question2
+```{r message=FALSE, warning=FALSE}
+#generating the genlight file from the provided raw and map files
+Fgen<-read.PLINK(file="F.raw", map.file = "F.map")
+
+#taking a look at the data stats
+Fgen
+#Number of individuals
+nInd(Fgen)# 60 individuals
+
+#number of populations and their names
+nPop(Fgen)
+Fgen@pop# So, 4 populations - DOR, LOG, MAR, POR
+
+
+#number of SNPs(loci)
+nLoc(Fgen)
+
+
+
+#running dartR validity check in order to proceed
+gl.compliance.check(Fgen)
+```
+
+## QUESTION3
+```{r}
+#producing the graphs for each population
+gl.report.hwe(Fgen,subset="each")
+```
+
+## QUESTION4
+```{r fig.show='hide'}
+#Converting into dataframe
+Fgen_df<-as.data.frame(Fgen)
+
+#Renaming SNP columns
+colnames(Fgen_df)<-gsub("_.*","", colnames(Fgen_df))
+
+#Converting back into genlight and performing compliance check again
+Fgen_fix <- new("genlight", as.matrix(Fgen_df))
+gl.compliance.check(Fgen_fix)
+
+#calculating PCA
+FgenPCA<-gl.pcoa(Fgen_fix)
+```
+```{r}
+#Plotting
+gl.pcoa.plot(x=Fgen,glPca = FgenPCA)
+```
+
+## QUESTION5
+
+```{r}
+#Creating the coordinates file
+
+#First I had to connect location codes to population names
+#For locations, I assumed Morocco for MAR, Spain for DOR, Portugal for POR and LOG
+
+pop_mapping <- data.frame(
+  Sample_Code = c("SSWB28", "SSWB24", "SSWB42", "SSWB31", "SSWB32", "WB36", 
+                  "SSMR01", "MR01", "CA01", "SSWB51", "SSWB44", "SSWB54"),
+  Population  = c("DOR", "DOR", "DOR", "LOG", "LOG", "LOG",
+                  "MAR", "MAR", "POR", "POR", "POR", "POR")
+)
+
+#Then I created latitude and longitude table for each of the locations
+pop_coords <- data.frame(
+  Population = c("DOR", "LOG", "MAR", "POR"),
+  lat  = c(40.4168, 38.7169, 33.5731, 39.3999),
+  lon = c(-3.7038, -9.1399, -7.5898, -8.2245)
+)
+
+# I had to somehow extract population code from sample names 
+individuals <- data.frame(id = Fgen_fix@ind.names)
+individuals$Sample_Code <- sub(".*_(SSWB[0-9]+|MR01|CA01|WB36).*", "\\1", individuals$id)
+
+# Merged individuals with their populations accordingly
+individuals <- left_join(individuals, pop_mapping, by = "Sample_Code")
+
+# Then merged the individuals to the coordinates
+coordinates_df <- left_join(individuals, pop_coords, by = "Population")
+
+# Finally, saved everything to a txt file
+write.table(coordinates_df[, c("id", "lat", "lon")], "coordinates2.txt", 
+            row.names = FALSE, col.names = TRUE, quote = FALSE, sep = "\t")
+print(head(coordinates_df))
+
+#After having some issue with the spacing of the file I had to edit
+coords<- read.table("coordinates2.txt",header=TRUE,sep="\t")
+
+#Finally, I was ready to run the IBD
+coords<-read.table("coordinates2.txt", header=T)
+coords<-as.data.frame(coords)
+
+gl.ibd(Fgen, coordinates = coords[,2-3], distance = "Fst")
+```
+
