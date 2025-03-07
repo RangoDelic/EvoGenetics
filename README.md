@@ -1,2 +1,2 @@
 # EvoGenetics
-Stuff about the EvoGenetics course
+EvolutionGenetics project
